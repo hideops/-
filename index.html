@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+
+{% block content %}
+    <h1 class="text-center">
+        {% if username %}
+            Добро пожаловать, {{ username }}!
+        {% else %}
+            Добро пожаловать в нашу систему!
+        {% endif %}
+    </h1>
+{% endblock %}
