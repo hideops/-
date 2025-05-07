@@ -132,3 +132,138 @@ def profile():
                     groups_info=groups_info,
                     top_groups_info=top_groups_info,
                     friends_gender_graph=friends_gender_graph,  # График друзей
+                    total_groups_graph=total_groups_graph,  # График общего количества групп
+                    top_groups_graph=top_groups_graph  # График топ-5 групп
+                )
+            except Exception as e:
+                flash('Ошибка при получении данных', 'danger')
+                return redirect(url_for('profile'))
+        else:
+            flash('Неверный формат URL', 'danger')
+            return redirect(url_for('profile'))
+
+    return render_template('profile.html')
+
+
+def create_groups_activity_graph(groups_info, top_groups_info):
+    # График общего количества групп
+    if not groups_info:
+        return None
+
+    total_groups = groups_info.get('total', 0)
+
+    # Создаем график для общего количества групп
+    plt.figure(figsize=(5, 5))
+    plt.bar(['Группы'], [total_groups], color='green')
+    plt.title('Общее количество групп')
+
+    img_io = io.BytesIO()
+    plt.savefig(img_io, format='png')
+    img_io.seek(0)
+    total_groups_graph = base64.b64encode(img_io.getvalue()).decode('utf-8')
+    plt.close()
+
+    # График топ-5 групп по количеству участников
+    if not top_groups_info:
+        return total_groups_graph, None
+
+    group_names = [g[0] for g in top_groups_info]
+    group_members = [g[1] for g in top_groups_info]
+
+    plt.figure(figsize=(8, 5))
+    plt.bar(group_names, group_members, color='lightcoral')
+    plt.xticks(rotation=45, ha='right')
+    plt.title('Топ-5 групп по количеству участников')
+    plt.xlabel('Группы')
+    plt.ylabel('Количество участников')
+
+    img_io = io.BytesIO()
+    plt.tight_layout()
+    plt.savefig(img_io, format='png')
+    img_io.seek(0)
+    top_groups_graph = base64.b64encode(img_io.getvalue()).decode('utf-8')
+    plt.close()
+
+    return total_groups_graph, top_groups_graph
+
+# Функция для извлечения ID пользователя ВКонтакте из ссылки
+def extract_user_id(url):
+    if "vk.com/" in url:
+        username = url.split("vk.com/")[1]
+        token = 'c63860bfc63860bfc63860bffbc508895bcc638c63860bfae23074c88948f64e3e66c9a'  # Замените на ваш токен
+        vk_api_instance = get_vk_api(token)
+        try:
+            user_info = vk_api_instance.users.get(user_ids=username)
+            return user_info[0]['id']
+        except Exception as e:
+            return None
+    return None
+
+
+
+# Логика выхода
+@app.route('/logout')
+def logout():
+    session.pop('user_id', None)
+    flash('Вы вышли из системы', 'info')
+    return redirect(url_for('login'))
+
+
+# Функция для создания графиков интересов
+def create_interests_graph(user_info):
+    interests_str = user_info.get('interests', '')
+
+    if not interests_str.strip():
+        return None  # Нет интересов — график не строим
+
+    # Разбиваем по запятым и убираем лишние пробелы
+    interests = [i.strip() for i in interests_str.split(',') if i.strip()]
+
+    if not interests:
+        return None
+
+    # Готовим данные для графика
+    counts = {interest: 1 for interest in interests}
+
+    plt.figure(figsize=(8, 4))
+    plt.bar(counts.keys(), counts.values(), color='skyblue')
+    plt.xticks(rotation=45, ha='right')
+    plt.title('Интересы пользователя')
+    plt.yticks([])
+
+    img_io = io.BytesIO()
+    plt.tight_layout()
+    plt.savefig(img_io, format='png')
+    img_io.seek(0)
+    graph_data = base64.b64encode(img_io.getvalue()).decode('utf-8')
+    plt.close()
+
+    return graph_data
+
+def create_post_activity_graph(vk_api_instance, vk_user_id):
+    try:
+        posts = vk_api_instance.wall.get(owner_id=vk_user_id, count=100)['items']
+    except Exception:
+        return None
+
+    if not posts:
+        return None
+
+    month_counts = {i: 0 for i in range(1, 13)}
+    for post in posts:
+        timestamp = post['date']
+        month = time.localtime(timestamp).tm_mon
+        month_counts[month] += 1
+
+    months = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь',
+              'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь']
+    post_values = [month_counts[i] for i in range(1, 13)]
+
+    plt.figure(figsize=(10, 5))
+    plt.bar(months, post_values, color='orange')
+    plt.xticks(rotation=45)
+    plt.title('Активность публикаций по месяцам')
+    plt.ylabel('Количество публикаций')
+    plt.tight_layout()
+
+    img_io = io.BytesIO()
