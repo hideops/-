@@ -103,7 +103,7 @@ def profile():
         vk_user_id = extract_user_id(vk_url)
 
         if vk_user_id:
-            token = 'c63860bfc63860bfc63860bffbc508895bcc638c63860bfae23074c88948f64e3e66c9a'  # Замените на ваш токен
+            token = 'токен'  # Замените на ваш токен
             vk_api_instance = get_vk_api(token)
 
             try:
@@ -190,7 +190,7 @@ def create_groups_activity_graph(groups_info, top_groups_info):
 def extract_user_id(url):
     if "vk.com/" in url:
         username = url.split("vk.com/")[1]
-        token = 'c63860bfc63860bfc63860bffbc508895bcc638c63860bfae23074c88948f64e3e66c9a'  # Замените на ваш токен
+        token = 'токен'  # Замените на ваш токен
         vk_api_instance = get_vk_api(token)
         try:
             user_info = vk_api_instance.users.get(user_ids=username)
