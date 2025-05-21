@@ -358,3 +358,183 @@ def create_interests_graph(user_info):
     plt.xticks(rotation=45, ha='right')
     plt.title('Интересы пользователя')
     plt.yticks([])
+
+    img_io = io.BytesIO()
+    plt.tight_layout()
+    plt.savefig(img_io, format='png')
+    img_io.seek(0)
+    graph_data = base64.b64encode(img_io.getvalue()).decode('utf-8')
+    plt.close()
+
+    return graph_data
+
+def create_post_activity_graph(vk_api_instance, vk_user_id):
+    try:
+        posts = vk_api_instance.wall.get(owner_id=vk_user_id, count=100)['items']
+    except Exception:
+        return None
+
+    if not posts:
+        return None
+
+    month_counts = {i: 0 for i in range(1, 13)}
+    for post in posts:
+        timestamp = post['date']
+        month = time.localtime(timestamp).tm_mon
+        month_counts[month] += 1
+
+    months = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь',
+              'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь']
+    post_values = [month_counts[i] for i in range(1, 13)]
+
+    plt.figure(figsize=(10, 5))
+    plt.bar(months, post_values, color='orange')
+    plt.xticks(rotation=45)
+    plt.title('Активность публикаций по месяцам')
+    plt.ylabel('Количество публикаций')
+    plt.tight_layout()
+
+    img_io = io.BytesIO()
+    plt.savefig(img_io, format='png')
+    img_io.seek(0)
+    graph_data = base64.b64encode(img_io.getvalue()).decode('utf-8')
+    plt.close()
+
+    return graph_data
+
+
+def create_groups_stats(vk_api_instance, vk_user_id):
+    try:
+        groups_data = vk_api_instance.groups.get(user_id=vk_user_id, extended=1, fields='members_count')
+    except Exception:
+        return None, None, None, None
+
+    groups_info = {'total': len(groups_data['items'])}
+
+    # Сортируем группы по количеству участников
+    top_groups = sorted(groups_data['items'], key=lambda g: g.get('members_count', 0), reverse=True)[:5]
+    top_groups_info = [(g['name'], g.get('members_count', 0)) for g in top_groups]
+
+    # Создаем графики
+    total_groups_graph, top_groups_graph = create_groups_activity_graph(groups_info, top_groups_info)
+
+    return groups_info, top_groups_info, total_groups_graph, top_groups_graph
+
+
+
+
+def create_friends_stats(vk_api_instance, vk_user_id):
+    try:
+        friends_data = vk_api_instance.friends.get(user_id=vk_user_id, fields='sex')
+    except Exception:
+        return None, None, None
+
+    male_count = 0
+    female_count = 0
+
+    for friend in friends_data['items']:
+        sex = friend.get('sex')
+        if sex == 1:
+            female_count += 1
+        elif sex == 2:
+            male_count += 1
+
+    gender_counts = {'Мужчины': male_count, 'Женщины': female_count}
+
+    # Создаем график для статистики по полу друзей
+    gender_graph = create_friends_gender_graph(gender_counts)
+
+    return gender_counts, friends_data, gender_graph
+
+
+def create_friends_gender_graph(gender_counts):
+    if not gender_counts:
+        return None
+
+    # Создаем график
+    labels = list(gender_counts.keys())
+    values = list(gender_counts.values())
+
+    plt.figure(figsize=(5, 5))
+    plt.pie(values, labels=labels, autopct='%1.1f%%', colors=['#ff9999','#66b3ff'])
+    plt.title('Статистика по полу друзей')
+
+    img_io = io.BytesIO()
+    plt.savefig(img_io, format='png')
+    img_io.seek(0)
+    graph_data = base64.b64encode(img_io.getvalue()).decode('utf-8')
+    plt.close()
+    return graph_data
+
+def create_groups_activity_graph(groups_info, top_groups_info):
+    # График общего количества групп
+    if not groups_info:
+        return None
+
+    total_groups = groups_info.get('total', 0)
+
+    # Создаем график для общего количества групп
+    plt.figure(figsize=(5, 5))
+    plt.bar(['Группы'], [total_groups], color='green')
+    plt.title('Общее количество групп')
+
+    img_io = io.BytesIO()
+    plt.savefig(img_io, format='png')
+    img_io.seek(0)
+    total_groups_graph = base64.b64encode(img_io.getvalue()).decode('utf-8')
+    plt.close()
+
+    # График топ-5 групп по количеству участников
+    if not top_groups_info:
+        return total_groups_graph, None
+
+    group_names = [g[0] for g in top_groups_info]
+    group_members = [g[1] for g in top_groups_info]
+
+    plt.figure(figsize=(8, 5))
+    plt.bar(group_names, group_members, color='lightcoral')
+    plt.xticks(rotation=45, ha='right')
+    plt.title('Топ-5 групп по количеству участников')
+    plt.xlabel('Группы')
+    plt.ylabel('Количество участников')
+
+    img_io = io.BytesIO()
+    plt.tight_layout()
+    plt.savefig(img_io, format='png')
+    img_io.seek(0)
+    top_groups_graph = base64.b64encode(img_io.getvalue()).decode('utf-8')
+    plt.close()
+
+    return total_groups_graph, top_groups_graph
+
+@app.route('/social_graph', methods=['GET', 'POST'])
+def social_graph():
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+
+    graph_img = None
+
+    if request.method == 'POST':
+        vk_url = request.form['vk_url']
+        vk_user_id = extract_user_id(vk_url)
+
+        if not vk_user_id:
+            flash('Невалидный VK URL', 'danger')
+            return redirect(url_for('social_graph'))
+
+        token = 'c63860bfc63860bfc63860bffbc508895bcc638c63860bfae23074c88948f64e3e66c9a'
+        vk_api_instance = get_vk_api(token)
+
+        try:
+            graph_img = generate_social_graph_image_with_avatars(vk_api_instance, vk_user_id)
+        except Exception as e:
+            flash('Ошибка при построении графа связей', 'danger')
+            return redirect(url_for('social_graph'))
+
+    return render_template('social_graph.html', graph_img=graph_img)
+
+
+if __name__ == "__main__":
+    with app.app_context():
+        db.create_all()
+    app.run(debug=True)
