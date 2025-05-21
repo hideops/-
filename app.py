@@ -178,3 +178,183 @@ def profile():
         color='blue',
         show_interests=True,
         show_posts=True,
+        show_friends=True,
+        show_groups=True
+    )
+
+
+@app.route('/logout')
+def logout():
+    session.pop('user_id', None)
+    flash('Вы вышли из системы', 'info')
+    return redirect(url_for('login'))
+
+
+
+def generate_social_graph_image_with_avatars(vk_api_instance, user_id):
+    try:
+        # Получаем информацию о пользователе и его друзьях
+        user_info = vk_api_instance.users.get(user_ids=user_id, fields='photo_100,first_name,last_name')[0]
+        friends = vk_api_instance.friends.get(user_id=user_id, fields='photo_100,first_name,last_name')['items']
+    except Exception as e:
+        print("Ошибка получения данных:", e)
+        return None
+
+    # Ограничиваем количество друзей для лучшей визуализации (например, 30)
+    friends = friends[:30]
+
+    # Создаем граф
+    G = nx.Graph()
+
+    # Добавляем центрального пользователя
+    G.add_node(user_info['id'],
+               photo=user_info.get('photo_100'),
+               name=f"{user_info['first_name']} {user_info['last_name']}")
+
+    # Добавляем друзей и связи с пользователем
+    for friend in friends:
+        friend_id = friend['id']
+        G.add_node(friend_id,
+                   photo=friend.get('photo_100'),
+                   name=f"{friend['first_name']} {friend['last_name']}")
+        G.add_edge(user_info['id'], friend_id)
+
+    # Проверяем взаимные связи между друзьями
+    #for i, friend1 in enumerate(friends):
+        #for friend2 in friends[i + 1:]:
+            #try:
+                # Проверяем, являются ли friend1 и friend2 друзьями друг друга
+                #are_friends = vk_api_instance.friends.areFriends(
+                    #user_ids=friend1['id'],
+                    #need_sign=0,
+                    #target_uid=friend2['id']
+                #)
+                #if are_friends and are_friends[0].get('friend_status') == 3:  # 3 - взаимная дружба
+                    #G.add_edge(friend1['id'], friend2['id'])
+            #except Exception as e:
+                #print(f"Ошибка при проверке связи между {friend1['id']} и {friend2['id']}: {e}")
+                #continue
+
+    # Визуализация графа
+    plt.figure(figsize=(15, 12))
+    pos = nx.spring_layout(G, k=0.3, seed=42)  # k - параметр расстояния между узлами
+
+    # Рисуем связи
+    nx.draw_networkx_edges(G, pos, alpha=0.5, width=1, edge_color='gray')
+
+    # Рисуем узлы с аватарками
+    ax = plt.gca()
+    for node in G.nodes():
+        photo_url = G.nodes[node].get('photo')
+        if not photo_url:
+            continue
+
+        try:
+            # Загружаем и обрабатываем аватарку
+            response = requests.get(photo_url)
+            img = Image.open(io.BytesIO(response.content)).resize((60, 60))
+
+            # Делаем круглые аватарки
+            mask = Image.new('L', (60, 60), 0)
+            draw = ImageDraw.Draw(mask)
+            draw.ellipse((0, 0, 60, 60), fill=255)
+            img.putalpha(mask)
+
+            imagebox = OffsetImage(img, zoom=1)
+            ab = AnnotationBbox(imagebox, pos[node], frameon=False)
+            ax.add_artist(ab)
+
+            # Добавляем подпись с именем
+            plt.text(pos[node][0], pos[node][1] - 0.1,
+                     G.nodes[node]['name'],
+                     fontsize=8,
+                     ha='center',
+                     bbox=dict(facecolor='white', alpha=0.7, edgecolor='none', boxstyle='round,pad=0.2'))
+        except Exception as e:
+            print(f"Ошибка при обработке аватарки для {node}: {e}")
+            continue
+
+    # Выделяем центрального пользователя
+    if user_info['id'] in pos:
+        plt.scatter(pos[user_info['id']][0], pos[user_info['id']][1],
+                    s=2000, edgecolors='red', facecolors='none', linewidths=2)
+
+    plt.title(f'Социальный граф {user_info["first_name"]} {user_info["last_name"]}\n(Взаимные связи друзей)',
+              fontsize=14, pad=20)
+    plt.axis('off')
+
+    # Добавляем легенду
+    legend_elements = [
+        plt.Line2D([0], [0], marker='o', color='w', label='Вы',
+                   markerfacecolor='none', markersize=10, markeredgecolor='red', markeredgewidth=2),
+        plt.Line2D([0], [0], marker='o', color='w', label='Друзья',
+                   markerfacecolor='none', markersize=10, markeredgecolor='blue'),
+        plt.Line2D([0], [0], color='gray', lw=1, label='Взаимные связи')
+    ]
+    plt.legend(handles=legend_elements, loc='upper right', bbox_to_anchor=(1, 1))
+
+    # Сохраняем изображение
+    img_io = io.BytesIO()
+    plt.savefig(img_io, format='png', bbox_inches='tight', dpi=120)
+    img_io.seek(0)
+    encoded_img = base64.b64encode(img_io.getvalue()).decode('utf-8')
+    plt.close()
+
+    return encoded_img
+
+
+
+
+
+def create_interests_graph(user_info):
+    interests_str = user_info.get('interests', '')
+
+    if not interests_str.strip():
+        return None  # Нет интересов — график не строим
+
+    # Разбиваем по запятым и убираем лишние пробелы
+    interests = [i.strip() for i in interests_str.split(',') if i.strip()]
+
+    if not interests:
+        return None
+
+    # Готовим данные для графика
+    counts = {interest: 1 for interest in interests}
+
+    plt.figure(figsize=(8, 4))
+    plt.bar(counts.keys(), counts.values(), color='skyblue')
+    plt.xticks(rotation=45, ha='right')
+    plt.title('Интересы пользователя')
+    plt.yticks([])
+
+    img_io = io.BytesIO()
+    plt.tight_layout()
+    plt.savefig(img_io, format='png')
+    img_io.seek(0)
+    graph_data = base64.b64encode(img_io.getvalue()).decode('utf-8')
+    plt.close()
+
+    return graph_data
+
+
+# 👇 сюда добавь свои остальные функции: create_interests_graph, create_post_activity_graph, create_groups_stats и т.д.
+def create_interests_graph(user_info):
+    interests_str = user_info.get('interests', '')
+
+    if not interests_str.strip():
+        return None  # Нет интересов — график не строим
+
+    # Разбиваем по запятым и убираем лишние пробелы
+    interests = [i.strip() for i in interests_str.split(',') if i.strip()]
+
+    if not interests:
+        return None
+
+    # Готовим данные для графика
+    counts = {interest: 1 for interest in interests}
+
+    plt.figure(figsize=(8, 4))
+    plt.bar(counts.keys(), counts.values(), color='skyblue')
+    plt.xticks(rotation=45, ha='right')
+    plt.title('Интересы пользователя')
+    plt.yticks([])
