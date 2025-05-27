@@ -40,7 +40,7 @@
 ## *Структура Flask-проекта*
 <li> app.py 
 <li> templates
-    ..- index.html
+    ..<li> index.html
     <li> login.html
     <li> profile. html
     <li> register.html
