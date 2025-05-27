@@ -38,12 +38,12 @@
 Анализ токсичности пользователя. \
 *картинка* 
 ## *Структура Flask-проекта*
-<li> app.py 
+<li> app.py Отвечает за создание веб-приложения, интегрируется с  VK API, строит интерактивный социальный граф, генерирует персонализированные рекомендации, использует GigaChat
 <li> templates
-    <li> index.html 
-    <li> login.html 
-    <li> profile. html 
-    <li> register.html 
+  <li> index.html 
+  <li> login.html 
+  <li> profile. html 
+  <li> register.html 
       
 ## *Список источников информации*
 *китайские дети*
