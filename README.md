@@ -40,10 +40,10 @@
 ## *Структура Flask-проекта*
 <li> app.py 
 <li> templates
-    ..<li> index.html
-    <li> login.html
-    <li> profile. html
-    <li> register.html
+    <li> index.html 
+    <li> login.html 
+    <li> profile. html 
+    <li> register.html 
       
 ## *Список источников информации*
 *китайские дети*
