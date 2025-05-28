@@ -8,13 +8,24 @@ import time
 import networkx as nx
 import matplotlib.pyplot as plt
 from matplotlib.offsetbox import OffsetImage, AnnotationBbox
+from PIL import Image, ImageDraw
 import requests
 import traceback
-from PIL import Image, ImageDraw
+from gigachat import GigaChat
+from gigachat.models import Chat, Messages
+import matplotlib
+
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+from requests.exceptions import RequestException
+import vk_api.exceptions
+
+
 
 app = Flask(__name__)
 app.secret_key = 'your_secret_key'
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///users.db'
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
 
@@ -24,66 +35,29 @@ class User(db.Model):
     password = db.Column(db.String(150), nullable=False)
 
 
+
+giga = GigaChat(
+    credentials="Njk5NGJmNzktZTk4NC00YTNjLWI1YjctNGVlY2E3YTlkNzIyOmI0MjI2MTI2LTY0Y2UtNGU0MS04NmU3LWZjNzVlMDExOTc2Mw==",
+    verify_ssl_certs=False,
+    timeout=10  
+)
+
+
+
 def get_vk_api(token):
     vk_session = vk_api.VkApi(token=token)
     return vk_session.get_api()
 
 
-@app.route('/')
-def home():
-    if 'user_id' not in session:
-        return redirect(url_for('login'))
-    return redirect(url_for('profile'))
-
-
-@app.route('/register', methods=['GET', 'POST'])
-def register():
-    if request.method == 'POST':
-        username = request.form['username']
-        password = request.form['password']
-        hashed_password = generate_password_hash(password)
-
-        new_user = User(username=username, password=hashed_password)
-        try:
-            db.session.add(new_user)
-            db.session.commit()
-            flash('Регистрация успешна!', 'success')
-            return redirect(url_for('login'))
-        except Exception:
-            flash('Ошибка регистрации!', 'danger')
-            return redirect(url_for('register'))
-
-    return render_template('register.html')
-
-
-@app.route('/login', methods=['GET', 'POST'])
-def login():
-    if request.method == 'POST':
-        username = request.form['username']
-        password = request.form['password']
-        user = User.query.filter_by(username=username).first()
-
-        if user and check_password_hash(user.password, password):
-            session['user_id'] = user.id
-            flash('Вы вошли!', 'success')
-            return redirect(url_for('profile'))
-        else:
-            flash('Неверный логин или пароль', 'danger')
-            return redirect(url_for('login'))
-
-    return render_template('login.html')
-
-
 def extract_user_id(url_or_id):
-    token = 'c63860bfc63860bfc63860bffbc508895bcc638c63860bfae23074c88948f64e3e66c9a'
-    vk_api_instance = get_vk_api(token)
-
     if "vk.com/" in url_or_id:
         username = url_or_id.split("vk.com/")[1].strip('/')
     else:
         username = url_or_id.strip('/')
 
     try:
+        token = 'vk1.a.USGB6XBqseXr9H8xXVtGRoQnwcM7veA31BKJFw1r-hH7SO1PbvGUrk4cCP3I5nOvVvKld8T_tLnZO3oQyGAWzVXxAQHTNo3Af6pFWqB8ICAvocx9O_WMOVhznB1FZEdsVULvpWidm8UNfOr9Efsw2FWczIDPUunEilRgWyB_4bhcVNgw05g7I-orFhF78rps5VlsQIJlomGgrJSGeUIqGw'
+        vk_api_instance = get_vk_api(token)
         user_info = vk_api_instance.users.get(user_ids=username)
         return user_info[0]['id']
     except Exception as e:
@@ -107,222 +81,15 @@ def format_bdate(bdate_str):
     return f"{date.day} {months[date.month - 1]}"
 
 
-@app.route('/profile', methods=['GET', 'POST'])
-def profile():
-    if 'user_id' not in session:
-        return redirect(url_for('login'))
-
-    if request.method == 'POST':
-        vk_url = request.form['vk_url']
-        vk_user_id = extract_user_id(vk_url)
-
-        scale = request.form.get('scale', '1')
-        color = request.form.get('color', 'blue')
-
-        show_interests = 'show_interests' in request.form
-        show_posts = 'show_posts' in request.form
-        show_friends = 'show_friends' in request.form
-        show_groups = 'show_groups' in request.form
-
-        if vk_user_id:
-            token = 'c63860bfc63860bfc63860bffbc508895bcc638c63860bfae23074c88948f64e3e66c9a'
-            vk_api_instance = get_vk_api(token)
-
-            try:
-                user_info = vk_api_instance.users.get(
-                    user_ids=vk_user_id,
-                    fields='sex,bdate,interests,city'
-                )[0]
-
-                formatted_bdate = format_bdate(user_info.get('bdate', ''))
-
-                interests_graph = create_interests_graph(user_info) if show_interests else None
-                post_activity_graph = create_post_activity_graph(vk_api_instance, vk_user_id) if show_posts else None
-                friends_gender_stats, friends_data, friends_gender_graph = create_friends_stats(vk_api_instance, vk_user_id) if show_friends else (None, None, None)
-                groups_info, top_groups_info, total_groups_graph, top_groups_graph = create_groups_stats(vk_api_instance, vk_user_id) if show_groups else (None, None, None, None)
-
-                # 🔥 исправлено: корректный вызов генерации графа
-                social_graph_img = generate_social_graph_image_with_avatars(vk_api_instance, vk_user_id)
-
-                return render_template('profile.html',
-                    user_info=user_info,
-                    formatted_bdate=formatted_bdate,
-                    interests_graph=interests_graph,
-                    post_activity_graph=post_activity_graph,
-                    friends_gender_stats=friends_gender_stats,
-                    friends_data=friends_data,
-                    friends_gender_graph=friends_gender_graph,
-                    groups_info=groups_info,
-                    top_groups_info=top_groups_info,
-                    total_groups_graph=total_groups_graph,
-                    top_groups_graph=top_groups_graph,
-                    scale=scale,
-                    color=color,
-                    show_interests=show_interests,
-                    show_posts=show_posts,
-                    show_friends=show_friends,
-                    show_groups=show_groups,
-                    social_graph_img=social_graph_img
-                )
-            except Exception as e:
-                print("Ошибка при обработке профиля:", e)
-                traceback.print_exc()
-                flash('Ошибка при получении данных', 'danger')
-                return redirect(url_for('profile'))
-        else:
-            flash('Неверный формат ссылки или ID', 'danger')
-            return redirect(url_for('profile'))
-
-    return render_template('profile.html',
-        scale='1',
-        color='blue',
-        show_interests=True,
-        show_posts=True,
-        show_friends=True,
-        show_groups=True
-    )
-
-
-@app.route('/logout')
-def logout():
-    session.pop('user_id', None)
-    flash('Вы вышли из системы', 'info')
-    return redirect(url_for('login'))
-
-
-
-def generate_social_graph_image_with_avatars(vk_api_instance, user_id):
-    try:
-        # Получаем информацию о пользователе и его друзьях
-        user_info = vk_api_instance.users.get(user_ids=user_id, fields='photo_100,first_name,last_name')[0]
-        friends = vk_api_instance.friends.get(user_id=user_id, fields='photo_100,first_name,last_name')['items']
-    except Exception as e:
-        print("Ошибка получения данных:", e)
-        return None
-
-    # Ограничиваем количество друзей для лучшей визуализации (например, 30)
-    friends = friends[:30]
-
-    # Создаем граф
-    G = nx.Graph()
-
-    # Добавляем центрального пользователя
-    G.add_node(user_info['id'],
-               photo=user_info.get('photo_100'),
-               name=f"{user_info['first_name']} {user_info['last_name']}")
-
-    # Добавляем друзей и связи с пользователем
-    for friend in friends:
-        friend_id = friend['id']
-        G.add_node(friend_id,
-                   photo=friend.get('photo_100'),
-                   name=f"{friend['first_name']} {friend['last_name']}")
-        G.add_edge(user_info['id'], friend_id)
-
-    # Проверяем взаимные связи между друзьями
-    #for i, friend1 in enumerate(friends):
-        #for friend2 in friends[i + 1:]:
-            #try:
-                # Проверяем, являются ли friend1 и friend2 друзьями друг друга
-                #are_friends = vk_api_instance.friends.areFriends(
-                    #user_ids=friend1['id'],
-                    #need_sign=0,
-                    #target_uid=friend2['id']
-                #)
-                #if are_friends and are_friends[0].get('friend_status') == 3:  # 3 - взаимная дружба
-                    #G.add_edge(friend1['id'], friend2['id'])
-            #except Exception as e:
-                #print(f"Ошибка при проверке связи между {friend1['id']} и {friend2['id']}: {e}")
-                #continue
-
-    # Визуализация графа
-    plt.figure(figsize=(15, 12))
-    pos = nx.spring_layout(G, k=0.3, seed=42)  # k - параметр расстояния между узлами
-
-    # Рисуем связи
-    nx.draw_networkx_edges(G, pos, alpha=0.5, width=1, edge_color='gray')
-
-    # Рисуем узлы с аватарками
-    ax = plt.gca()
-    for node in G.nodes():
-        photo_url = G.nodes[node].get('photo')
-        if not photo_url:
-            continue
-
-        try:
-            # Загружаем и обрабатываем аватарку
-            response = requests.get(photo_url)
-            img = Image.open(io.BytesIO(response.content)).resize((60, 60))
-
-            # Делаем круглые аватарки
-            mask = Image.new('L', (60, 60), 0)
-            draw = ImageDraw.Draw(mask)
-            draw.ellipse((0, 0, 60, 60), fill=255)
-            img.putalpha(mask)
-
-            imagebox = OffsetImage(img, zoom=1)
-            ab = AnnotationBbox(imagebox, pos[node], frameon=False)
-            ax.add_artist(ab)
-
-            # Добавляем подпись с именем
-            plt.text(pos[node][0], pos[node][1] - 0.1,
-                     G.nodes[node]['name'],
-                     fontsize=8,
-                     ha='center',
-                     bbox=dict(facecolor='white', alpha=0.7, edgecolor='none', boxstyle='round,pad=0.2'))
-        except Exception as e:
-            print(f"Ошибка при обработке аватарки для {node}: {e}")
-            continue
-
-    # Выделяем центрального пользователя
-    if user_info['id'] in pos:
-        plt.scatter(pos[user_info['id']][0], pos[user_info['id']][1],
-                    s=2000, edgecolors='red', facecolors='none', linewidths=2)
-
-    plt.title(f'Социальный граф {user_info["first_name"]} {user_info["last_name"]}\n(Взаимные связи друзей)',
-              fontsize=14, pad=20)
-    plt.axis('off')
-
-    # Добавляем легенду
-    legend_elements = [
-        plt.Line2D([0], [0], marker='o', color='w', label='Вы',
-                   markerfacecolor='none', markersize=10, markeredgecolor='red', markeredgewidth=2),
-        plt.Line2D([0], [0], marker='o', color='w', label='Друзья',
-                   markerfacecolor='none', markersize=10, markeredgecolor='blue'),
-        plt.Line2D([0], [0], color='gray', lw=1, label='Взаимные связи')
-    ]
-    plt.legend(handles=legend_elements, loc='upper right', bbox_to_anchor=(1, 1))
-
-    # Сохраняем изображение
-    img_io = io.BytesIO()
-    plt.savefig(img_io, format='png', bbox_inches='tight', dpi=120)
-    img_io.seek(0)
-    encoded_img = base64.b64encode(img_io.getvalue()).decode('utf-8')
-    plt.close()
-
-    return encoded_img
-
-
-
-
-
 def create_interests_graph(user_info):
     interests_str = user_info.get('interests', '')
-
-    if not interests_str.strip():
-        return None  # Нет интересов — график не строим
-
-    # Разбиваем по запятым и убираем лишние пробелы
     interests = [i.strip() for i in interests_str.split(',') if i.strip()]
 
     if not interests:
         return None
 
-    # Готовим данные для графика
-    counts = {interest: 1 for interest in interests}
-
     plt.figure(figsize=(8, 4))
-    plt.bar(counts.keys(), counts.values(), color='skyblue')
+    plt.bar(interests, [1] * len(interests), color='skyblue')
     plt.xticks(rotation=45, ha='right')
     plt.title('Интересы пользователя')
     plt.yticks([])
@@ -333,40 +100,8 @@ def create_interests_graph(user_info):
     img_io.seek(0)
     graph_data = base64.b64encode(img_io.getvalue()).decode('utf-8')
     plt.close()
-
     return graph_data
 
-
-# 👇 сюда добавь свои остальные функции: create_interests_graph, create_post_activity_graph, create_groups_stats и т.д.
-def create_interests_graph(user_info):
-    interests_str = user_info.get('interests', '')
-
-    if not interests_str.strip():
-        return None  # Нет интересов — график не строим
-
-    # Разбиваем по запятым и убираем лишние пробелы
-    interests = [i.strip() for i in interests_str.split(',') if i.strip()]
-
-    if not interests:
-        return None
-
-    # Готовим данные для графика
-    counts = {interest: 1 for interest in interests}
-
-    plt.figure(figsize=(8, 4))
-    plt.bar(counts.keys(), counts.values(), color='skyblue')
-    plt.xticks(rotation=45, ha='right')
-    plt.title('Интересы пользователя')
-    plt.yticks([])
-
-    img_io = io.BytesIO()
-    plt.tight_layout()
-    plt.savefig(img_io, format='png')
-    img_io.seek(0)
-    graph_data = base64.b64encode(img_io.getvalue()).decode('utf-8')
-    plt.close()
-
-    return graph_data
 
 def create_post_activity_graph(vk_api_instance, vk_user_id):
     try:
@@ -379,19 +114,14 @@ def create_post_activity_graph(vk_api_instance, vk_user_id):
 
     month_counts = {i: 0 for i in range(1, 13)}
     for post in posts:
-        timestamp = post['date']
-        month = time.localtime(timestamp).tm_mon
+        month = time.localtime(post['date']).tm_mon
         month_counts[month] += 1
 
-    months = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь',
-              'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь']
-    post_values = [month_counts[i] for i in range(1, 13)]
-
+    months = ['Янв', 'Фев', 'Мар', 'Апр', 'Май', 'Июн', 'Июл', 'Авг', 'Сен', 'Окт', 'Ноя', 'Дек']
     plt.figure(figsize=(10, 5))
-    plt.bar(months, post_values, color='orange')
-    plt.xticks(rotation=45)
-    plt.title('Активность публикаций по месяцам')
-    plt.ylabel('Количество публикаций')
+    plt.bar(months, [month_counts[i] for i in range(1, 13)], color='orange')
+    plt.title('Активность публикаций')
+    plt.ylabel('Количество')
     plt.tight_layout()
 
     img_io = io.BytesIO()
@@ -399,65 +129,54 @@ def create_post_activity_graph(vk_api_instance, vk_user_id):
     img_io.seek(0)
     graph_data = base64.b64encode(img_io.getvalue()).decode('utf-8')
     plt.close()
-
     return graph_data
-
-
-def create_groups_stats(vk_api_instance, vk_user_id):
-    try:
-        groups_data = vk_api_instance.groups.get(user_id=vk_user_id, extended=1, fields='members_count')
-    except Exception:
-        return None, None, None, None
-
-    groups_info = {'total': len(groups_data['items'])}
-
-    # Сортируем группы по количеству участников
-    top_groups = sorted(groups_data['items'], key=lambda g: g.get('members_count', 0), reverse=True)[:5]
-    top_groups_info = [(g['name'], g.get('members_count', 0)) for g in top_groups]
-
-    # Создаем графики
-    total_groups_graph, top_groups_graph = create_groups_activity_graph(groups_info, top_groups_info)
-
-    return groups_info, top_groups_info, total_groups_graph, top_groups_graph
-
-
 
 
 def create_friends_stats(vk_api_instance, vk_user_id):
     try:
-        friends_data = vk_api_instance.friends.get(user_id=vk_user_id, fields='sex')
+        friends_data = vk_api_instance.friends.get(user_id=vk_user_id, fields='sex', count=1000)
+        time.sleep(0.4)
     except Exception:
         return None, None, None
 
-    male_count = 0
-    female_count = 0
-
-    for friend in friends_data['items']:
-        sex = friend.get('sex')
-        if sex == 1:
-            female_count += 1
-        elif sex == 2:
-            male_count += 1
-
-    gender_counts = {'Мужчины': male_count, 'Женщины': female_count}
-
-    # Создаем график для статистики по полу друзей
-    gender_graph = create_friends_gender_graph(gender_counts)
-
-    return gender_counts, friends_data, gender_graph
-
-
-def create_friends_gender_graph(gender_counts):
-    if not gender_counts:
-        return None
-
-    # Создаем график
-    labels = list(gender_counts.keys())
-    values = list(gender_counts.values())
+    male = sum(1 for f in friends_data['items'] if f.get('sex') == 2)
+    female = sum(1 for f in friends_data['items'] if f.get('sex') == 1)
 
     plt.figure(figsize=(5, 5))
-    plt.pie(values, labels=labels, autopct='%1.1f%%', colors=['#ff9999','#66b3ff'])
-    plt.title('Статистика по полу друзей')
+    plt.pie([male, female], labels=['Мужчины', 'Женщины'], autopct='%1.1f%%', colors=['#66b3ff', '#ff9999'])
+    plt.title('Друзья по полу')
+
+    img_io = io.BytesIO()
+    plt.savefig(img_io, format='png')
+    img_io.seek(0)
+    graph_data = base64.b64encode(img_io.getvalue()).decode('utf-8')
+    plt.close()
+    return {'Мужчины': male, 'Женщины': female}, friends_data, graph_data
+
+
+def create_groups_stats(vk_api_instance, vk_user_id):
+    try:
+        groups_data = vk_api_instance.groups.get(user_id=vk_user_id, extended=1, fields='members_count', count=100)
+    except Exception:
+        return None, None, None, None
+
+
+    groups_info = {'total': len(groups_data['items'])}
+
+  
+    top_groups = sorted(groups_data['items'], key=lambda g: g.get('members_count', 0), reverse=True)[:5]
+    top_groups_info = [(g['name'], g.get('members_count', 0)) for g in top_groups]
+   
+    total_graph = create_total_groups_graph(groups_info['total'])
+    top_graph = create_top_groups_graph(top_groups_info) if top_groups_info else None
+
+    return groups_info, top_groups_info, total_graph, top_graph
+
+
+def create_total_groups_graph(total):
+    plt.figure(figsize=(5, 5))
+    plt.bar(['Группы'], [total], color='green')
+    plt.title('Всего групп')
 
     img_io = io.BytesIO()
     plt.savefig(img_io, format='png')
@@ -466,72 +185,454 @@ def create_friends_gender_graph(gender_counts):
     plt.close()
     return graph_data
 
-def create_groups_activity_graph(groups_info, top_groups_info):
-    # График общего количества групп
-    if not groups_info:
+
+def create_top_groups_graph(groups):
+    names = [g[0][:20] + '...' if len(g[0]) > 20 else g[0] for g in groups]
+    counts = [g[1] for g in groups]
+
+    plt.figure(figsize=(10, 5))
+    plt.barh(names, counts, color='lightcoral')
+    plt.title('Топ групп по участникам')
+    plt.tight_layout()
+
+    img_io = io.BytesIO()
+    plt.savefig(img_io, format='png')
+    img_io.seek(0)
+    graph_data = base64.b64encode(img_io.getvalue()).decode('utf-8')
+    plt.close()
+    return graph_data
+
+
+def generate_social_graph_image_with_avatars(vk_api_instance, user_id):
+    try:
+        
+        user_info = vk_api_instance.users.get(user_ids=user_id, fields='photo_100,first_name,last_name')[0]
+        friends = vk_api_instance.friends.get(user_id=user_id, fields='photo_100,first_name,last_name', count=50)[
+            'items']
+        time.sleep(0.4)
+    except Exception:
         return None
 
-    total_groups = groups_info.get('total', 0)
 
-    # Создаем график для общего количества групп
-    plt.figure(figsize=(5, 5))
-    plt.bar(['Группы'], [total_groups], color='green')
-    plt.title('Общее количество групп')
+    G = nx.Graph()
+    G.add_node(user_info['id'],
+               photo=user_info.get('photo_100'),
+               name=f"{user_info['first_name']} {user_info['last_name']}")
+
+    for friend in friends[:30]:  
+        G.add_node(friend['id'],
+                   photo=friend.get('photo_100'),
+                   name=f"{friend['first_name']} {friend['last_name']}")
+        G.add_edge(user_info['id'], friend['id'])
+
+
+    plt.figure(figsize=(12, 10))
+    pos = nx.spring_layout(G, k=0.3, seed=42)
+    ax = plt.gca()
+
+
+    nx.draw_networkx_edges(G, pos, alpha=0.3, width=1, edge_color='gray')
+
+
+    for node in G.nodes():
+        photo = G.nodes[node].get('photo')
+        if not photo:
+            continue
+
+        try:
+            response = requests.get(photo, timeout=5)
+            img = Image.open(io.BytesIO(response.content)).resize((50, 50))
+
+
+            mask = Image.new('L', (50, 50), 0)
+            draw = ImageDraw.Draw(mask)
+            draw.ellipse((0, 0, 50, 50), fill=255)
+            img.putalpha(mask)
+
+            imagebox = OffsetImage(img, zoom=1)
+            ab = AnnotationBbox(imagebox, pos[node], frameon=False)
+            ax.add_artist(ab)
+
+
+            plt.text(pos[node][0], pos[node][1] - 0.08,
+                     G.nodes[node]['name'],
+                     fontsize=7,
+                     ha='center',
+                     bbox=dict(facecolor='white', alpha=0.7, edgecolor='none', boxstyle='round,pad=0.1'))
+        except Exception:
+            continue
+
+
+    plt.scatter(pos[user_info['id']][0], pos[user_info['id']][1],
+                s=1500, edgecolors='red', facecolors='none', linewidths=2)
+
+    plt.title(f'Социальный граф {user_info["first_name"]} {user_info["last_name"]}', fontsize=14)
+    plt.axis('off')
+
 
     img_io = io.BytesIO()
-    plt.savefig(img_io, format='png')
+    plt.savefig(img_io, format='png', bbox_inches='tight', dpi=100)
     img_io.seek(0)
-    total_groups_graph = base64.b64encode(img_io.getvalue()).decode('utf-8')
+    encoded_img = base64.b64encode(img_io.getvalue()).decode('utf-8')
     plt.close()
 
-    # График топ-5 групп по количеству участников
-    if not top_groups_info:
-        return total_groups_graph, None
+    return encoded_img
 
-    group_names = [g[0] for g in top_groups_info]
-    group_members = [g[1] for g in top_groups_info]
 
-    plt.figure(figsize=(8, 5))
-    plt.bar(group_names, group_members, color='lightcoral')
-    plt.xticks(rotation=45, ha='right')
-    plt.title('Топ-5 групп по количеству участников')
-    plt.xlabel('Группы')
-    plt.ylabel('Количество участников')
+def find_potential_connections(vk_api_instance, user_id, user_info):
+    try:
 
-    img_io = io.BytesIO()
-    plt.tight_layout()
-    plt.savefig(img_io, format='png')
-    img_io.seek(0)
-    top_groups_graph = base64.b64encode(img_io.getvalue()).decode('utf-8')
-    plt.close()
+        friends = vk_api_instance.friends.get(user_id=user_id, fields="interests,groups", count=100)["items"]
+        time.sleep(0.4)
+        candidates = []
 
-    return total_groups_graph, top_groups_graph
 
-@app.route('/social_graph', methods=['GET', 'POST'])
-def social_graph():
+        for friend in friends[:5]:
+            try:
+                fof = vk_api_instance.friends.get(user_id=friend["id"], fields="interests,groups", count=100)["items"]
+                time.sleep(0.4)
+                candidates.extend(
+                    f for f in fof if f["id"] not in [x["id"] for x in friends] and not f.get("is_closed", True))
+            except Exception:
+                continue
+
+
+        user_interests = set(user_info.get("interests", "").lower().split(", "))
+        user_groups = set(str(g) for g in user_info.get("groups", []))
+
+        filtered = []
+        for person in candidates[:100]: 
+            common = 0
+
+
+            person_interests = set(person.get("interests", "").lower().split(", "))
+            common += len(user_interests & person_interests)
+
+
+            person_groups = set(str(g) for g in person.get("groups", []))
+            common += len(user_groups & person_groups)
+
+            if common > 0:
+                person["match_score"] = common
+                filtered.append(person)
+
+        return sorted(filtered, key=lambda x: x.get("match_score", 0), reverse=True)[:10]
+    except Exception:
+        return []
+
+
+def generate_dating_recommendations(vk_api_instance, user_info, candidates):
+    if not candidates:
+        return []
+
+    recommendations = []
+    base_url = "https://vk.com/id"
+
+    for person in candidates[:5]:
+        reason = "Друг друзей"  # По умолчанию
+        photo = person.get("photo_100", "")
+
+        # Формируем причину рекомендации
+        if person.get("match_score", 0) > 0:
+            reason = f"Совпадений: {person['match_score']}"
+
+        recommendations.append({
+            "name": f"{person.get('first_name', '')} {person.get('last_name', '')}",
+            "url": f"{base_url}{person['id']}",
+            "photo": photo,
+            "reason": reason
+        })
+
+    return recommendations
+
+
+MAT_WORDS = ["пиздец", "хуя", "блядь", "ебать", "ебал"]
+
+def find_toxic_posts(vk_api_instance, vk_user_id):
+    try:
+        response = vk_api_instance.wall.get(owner_id=vk_user_id, count=100)
+        posts = response.get('items', [])
+    except Exception as e:
+        print(f"Ошибка VK API: {e}")
+        posts = []
+
+    toxic_posts = []
+    for post in posts:
+        text = post.get('text', '').lower()
+        if any(bad_word in text for bad_word in MAT_WORDS):
+            post_id = post['id']
+            owner_id = post['owner_id']
+            url = f"https://vk.com/wall{owner_id}_{post_id}"
+            toxic_posts.append({'text': post.get('text', '')[:100], 'url': url})
+
+    return toxic_posts
+
+
+
+def generate_user_analytics(user_info, friends_data, groups_info, top_groups_info):
+    if not any([friends_data, groups_info]):
+        return None
+
+    prompt = f"""
+    Проанализируй данные пользователя ВКонтакте и составь краткую аналитику (3-5 предложений).
+    Имя: {user_info.get('first_name', 'Пользователь')} {user_info.get('last_name', '')}
+    Интересы: {user_info.get('interests', 'не указаны')}
+    Город: {user_info.get('city', {}).get('title', 'не указан')}
+    Пол: {'женский' if user_info.get('sex') == 1 else 'мужской'}
+    Друзей: {len(friends_data['items']) if friends_data else 0}
+    Групп: {groups_info.get('total', 0) if groups_info else 0}
+    Топ-3 группы: {', '.join([g[0] for g in top_groups_info[:3]]) if top_groups_info else 'не указаны'}
+
+    Аналитика должна быть краткой, информативной и дружелюбной.
+    """
+
+    try:
+        response = giga.chat(Chat(messages=[Messages(role="user", content=prompt)]))
+        return response.choices[0].message.content
+    except Exception:
+        return "Не удалось сгенерировать аналитику."
+
+
+
+@app.route('/')
+def home():
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+    return redirect(url_for('profile'))
+
+
+@app.route('/register', methods=['GET', 'POST'])
+def register():
+    if request.method == 'POST':
+        username = request.form['username']
+        password = request.form['password']
+
+        if User.query.filter_by(username=username).first():
+            flash('Имя пользователя уже занято', 'danger')
+            return redirect(url_for('register'))
+
+        hashed_password = generate_password_hash(password)
+        new_user = User(username=username, password=hashed_password)
+
+        try:
+            db.session.add(new_user)
+            db.session.commit()
+            flash('Регистрация успешна!', 'success')
+            return redirect(url_for('login'))
+        except Exception:
+            flash('Ошибка регистрации', 'danger')
+            return redirect(url_for('register'))
+
+    return render_template('register.html')
+
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        username = request.form['username']
+        password = request.form['password']
+        user = User.query.filter_by(username=username).first()
+
+        if user and check_password_hash(user.password, password):
+            session['user_id'] = user.id
+            flash('Вход выполнен успешно!', 'success')
+            return redirect(url_for('profile'))
+        else:
+            flash('Неверное имя пользователя или пароль', 'danger')
+            return redirect(url_for('login'))
+
+    return render_template('login.html')
+
+
+def load_user_data(vk_user_id, show_interests, show_posts, show_friends, show_groups, show_toxicity):
+    token = 'vk1.a.USGB6XBqseXr9H8xXVtGRoQnwcM7veA31BKJFw1r-hH7SO1PbvGUrk4cCP3I5nOvVvKld8T_tLnZO3oQyGAWzVXxAQHTNo3Af6pFWqB8ICAvocx9O_WMOVhznB1FZEdsVULvpWidm8UNfOr9Efsw2FWczIDPUunEilRgWyB_4bhcVNgw05g7I-orFhF78rps5VlsQIJlomGgrJSGeUIqGw'
+    vk_api_instance = get_vk_api(token)
+
+    fields = 'sex,bdate,city,photo_100'
+    if show_interests:
+        fields += ',interests'
+
+    user_info = vk_api_instance.users.get(user_ids=vk_user_id, fields=fields)[0]
+    formatted_bdate = format_bdate(user_info.get('bdate', ''))
+
+    interests_graph = create_interests_graph(user_info) if show_interests else None
+    post_activity_graph = create_post_activity_graph(vk_api_instance, vk_user_id) if show_posts else None
+
+    friends_gender_stats = friends_data = friends_gender_graph = None
+    dating_recommendations = None
+    if show_friends:
+        friends_gender_stats, friends_data, friends_gender_graph = create_friends_stats(vk_api_instance, vk_user_id)
+        dating_recommendations = generate_dating_recommendations(
+            vk_api_instance,
+            user_info,
+            find_potential_connections(vk_api_instance, vk_user_id, user_info)
+        )
+
+    groups_info = top_groups_info = total_groups_graph = top_groups_graph = None
+    if show_groups:
+        groups_info, top_groups_info, total_groups_graph, top_groups_graph = create_groups_stats(vk_api_instance, vk_user_id)
+
+    toxic_posts = find_toxic_posts(vk_api_instance, vk_user_id) if show_toxicity else None
+
+    social_graph_img = generate_social_graph_image_with_avatars(vk_api_instance, vk_user_id)
+
+    user_analytics = None
+    if show_friends or show_groups:
+        user_analytics = generate_user_analytics(
+            user_info,
+            friends_data if show_friends else None,
+            groups_info if show_groups else None,
+            top_groups_info if show_groups else None
+        )
+
+    return dict(
+        user_info=user_info,
+        formatted_bdate=formatted_bdate,
+        interests_graph=interests_graph,
+        post_activity_graph=post_activity_graph,
+        friends_gender_stats=friends_gender_stats,
+        friends_gender_graph=friends_gender_graph,
+        friends_data=friends_data,
+        groups_info=groups_info,
+        top_groups_info=top_groups_info,
+        total_groups_graph=total_groups_graph,
+        top_groups_graph=top_groups_graph,
+        social_graph_img=social_graph_img,
+        dating_recommendations=dating_recommendations,
+        user_analytics=user_analytics,
+        toxic_posts=toxic_posts
+    )
+
+
+@app.route('/profile', methods=['GET', 'POST'])
+def profile():
     if 'user_id' not in session:
         return redirect(url_for('login'))
 
-    graph_img = None
-
     if request.method == 'POST':
+        show_toxicity = 'show_toxicity' in request.form
         vk_url = request.form['vk_url']
         vk_user_id = extract_user_id(vk_url)
 
         if not vk_user_id:
-            flash('Невалидный VK URL', 'danger')
-            return redirect(url_for('social_graph'))
+            flash('Неверный URL профиля VK', 'danger')
+            return redirect(url_for('profile'))
 
-        token = 'c63860bfc63860bfc63860bffbc508895bcc638c63860bfae23074c88948f64e3e66c9a'
-        vk_api_instance = get_vk_api(token)
+        show_interests = 'show_interests' in request.form
+        show_posts = 'show_posts' in request.form
+        show_friends = 'show_friends' in request.form
+        show_groups = 'show_groups' in request.form
+        show_toxicity = 'show_toxicity' in request.form  
+        generate_graph = True
 
         try:
-            graph_img = generate_social_graph_image_with_avatars(vk_api_instance, vk_user_id)
-        except Exception as e:
-            flash('Ошибка при построении графа связей', 'danger')
-            return redirect(url_for('social_graph'))
+            token = 'vk1.a.USGB6XBqseXr9H8xXVtGRoQnwcM7veA31BKJFw1r-hH7SO1PbvGUrk4cCP3I5nOvVvKld8T_tLnZO3oQyGAWzVXxAQHTNo3Af6pFWqB8ICAvocx9O_WMOVhznB1FZEdsVULvpWidm8UNfOr9Efsw2FWczIDPUunEilRgWyB_4bhcVNgw05g7I-orFhF78rps5VlsQIJlomGgrJSGeUIqGw'
+            vk_api_instance = get_vk_api(token)
 
-    return render_template('social_graph.html', graph_img=graph_img)
+
+            fields = 'sex,bdate,city,photo_100'
+            if show_interests:
+                fields += ',interests'
+
+            user_info = vk_api_instance.users.get(user_ids=vk_user_id, fields=fields)[0]
+            formatted_bdate = format_bdate(user_info.get('bdate', ''))
+
+
+            interests_graph = None
+            post_activity_graph = None
+            friends_data = None
+            friends_gender_stats = None
+            friends_gender_graph = None
+            groups_info = None
+            top_groups_info = None
+            total_groups_graph = None
+            top_groups_graph = None
+            social_graph_img = None
+            dating_recommendations = None
+            user_analytics = None
+            toxic_posts = None  
+
+
+            if show_interests:
+                interests_graph = create_interests_graph(user_info)
+
+            if show_posts:
+                post_activity_graph = create_post_activity_graph(vk_api_instance, vk_user_id)
+
+            if show_friends:
+                friends_gender_stats, friends_data, friends_gender_graph = create_friends_stats(vk_api_instance,
+                                                                                                vk_user_id)
+                dating_recommendations = generate_dating_recommendations(
+                    vk_api_instance,
+                    user_info,
+                    find_potential_connections(vk_api_instance, vk_user_id, user_info)
+                )
+
+            if show_groups:
+                groups_info, top_groups_info, total_groups_graph, top_groups_graph = create_groups_stats(vk_api_instance, vk_user_id)
+
+            if show_toxicity:  
+                toxic_posts = find_toxic_posts(vk_api_instance, vk_user_id)
+
+            if generate_graph:
+                social_graph_img = generate_social_graph_image_with_avatars(vk_api_instance, vk_user_id)
+
+
+            if show_friends or show_groups:
+                user_analytics = generate_user_analytics(
+                    user_info,
+                    friends_data if show_friends else None,
+                    groups_info if show_groups else None,
+                    top_groups_info if show_groups else None
+                )
+
+            return render_template('profile.html',
+                                   user_info=user_info,
+                                   formatted_bdate=formatted_bdate,
+                                   show_interests=show_interests,
+                                   show_posts=show_posts,
+                                   show_friends=show_friends,
+                                   show_groups=show_groups,
+                                   interests_graph=interests_graph,
+                                   post_activity_graph=post_activity_graph,
+                                   friends_gender_stats=friends_gender_stats,
+                                   friends_gender_graph=friends_gender_graph,
+                                   groups_info=groups_info,
+                                   top_groups_info=top_groups_info,
+                                   total_groups_graph=total_groups_graph,
+                                   top_groups_graph=top_groups_graph,
+                                   social_graph_img=social_graph_img,
+                                   dating_recommendations=dating_recommendations,
+                                   user_analytics=user_analytics,
+                                   toxic_posts=toxic_posts,
+                                   show_toxicity=show_toxicity       
+                                   )
+
+        except vk_api.exceptions.ApiError as e:
+            flash(f'Ошибка VK API: {e}', 'danger')
+        except RequestException as e:
+            flash('Ошибка соединения с VK', 'danger')
+        except Exception as e:
+            flash('Неизвестная ошибка', 'danger')
+            print(f"Ошибка: {e}\n{traceback.format_exc()}")
+
+        return redirect(url_for('profile'))
+
+    return render_template('profile.html')
+
+@app.route('/logout')
+def logout():
+    session.pop('user_id', None)
+    flash('Вы вышли из системы', 'info')
+    return redirect(url_for('login'))
+
+
+@app.route('/social_graph')
+def social_graph():
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+    return render_template('social_graph.html')
+
 
 
 if __name__ == "__main__":
