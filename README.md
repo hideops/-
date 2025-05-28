@@ -43,7 +43,8 @@
 ![photo_2025-05-28_09-51-25](https://github.com/user-attachments/assets/b36cfa87-0ebe-461d-89c3-31e2e2c7ddc2)
 
 Анализ токсичности пользователя. \
-![photo_2025-05-28_09-51-25](https://github.com/user-attachments/assets/06ddbf77-de84-4a1b-99dc-5ecc85e59623)
+![photo_2025-05-28_09-52-18](https://github.com/user-attachments/assets/3a7c053e-4973-4ada-b5c0-18b88ca773a6)
+
 
 ## *Структура Flask-проекта*
 <li> app.py Отвечает за создание веб-приложения, интегрируется с  VK API, строит интерактивный социальный граф, генерирует персонализированные рекомендации, использует GigaChat.
