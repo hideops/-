@@ -3,144 +3,314 @@
 <head>
     <meta charset="UTF-8">
     <title>Профиль ВКонтакте</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
         body {
-            font-family: Arial, sans-serif;
-            background-color: #f5f5f5;
-            margin: 0;
-            padding: 0;
-            color: #333;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f8f9fa;
+            color: #212529;
         }
-        h1, h2, h3 {
-            color: #4CAF50;
-            text-align: center;
-        }
-        h1 {
-            margin-top: 20px;
-        }
-        form {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            margin-top: 20px;
-        }
-        label {
-            font-size: 16px;
-            margin-bottom: 8px;
-        }
-        input[type="text"] {
-            padding: 8px;
-            width: 300px;
-            font-size: 16px;
-            margin-bottom: 20px;
-            border-radius: 5px;
-            border: 1px solid #ccc;
-        }
-        button {
-            padding: 10px 20px;
-            background-color: #4CAF50;
+        .profile-header {
+            background: linear-gradient(135deg, #4CAF50, #2196F3);
             color: white;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-            font-size: 16px;
+            padding: 2rem;
+            border-radius: 0.5rem;
+            margin-bottom: 2rem;
         }
-        button:hover {
-            background-color: #45a049;
+        .card {
+            border-radius: 0.75rem;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            margin-bottom: 1.5rem;
+            transition: transform 0.3s;
         }
-        .profile-info {
-            margin-top: 30px;
-            text-align: center;
+        .card:hover {
+            transform: translateY(-5px);
         }
-        .profile-info p {
-            font-size: 18px;
-            line-height: 1.6;
+        .recommendation-card {
+            height: 100%;
         }
-        .profile-info p strong {
-            color: #4CAF50;
+        .recommendation-card img {
+            border-radius: 0.5rem 0.5rem 0 0;
+            height: 200px;
+            object-fit: cover;
         }
-        .profile-info img {
-            max-width: 80%;
-            margin-top: 20px;
+        .recommendation-card .card-body {
+            padding: 1.25rem;
         }
-        .alert {
-            text-align: center;
-            padding: 15px;
-            background-color: #f44336;
-            color: white;
-            margin-top: 20px;
-            border-radius: 5px;
+        .analytics-card {
+            background-color: #f8f9fa;
+            border-left: 4px solid #4CAF50;
         }
-        .success {
-            background-color: #4CAF50;
+        .graph-container {
+            background: white;
+            padding: 1rem;
+            border-radius: 0.5rem;
+            margin-bottom: 1rem;
         }
-        .info {
-            background-color: #2196F3;
+        .settings-panel {
+            background: white;
+            padding: 1.5rem;
+            border-radius: 0.75rem;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+        }
+        .reason-badge {
+            background-color: #e3f2fd;
+            color: #1976d2;
+            font-size: 0.85rem;
+        }
+        .scale-1 img { transform: scale(1); }
+        .scale-1-5 img { transform: scale(1.5); }
+        .scale-2 img { transform: scale(2); }
+        .blue-filter img { filter: hue-rotate(200deg); }
+        .green-filter img { filter: hue-rotate(100deg); }
+        .red-filter img { filter: hue-rotate(0deg); }
+        .form-check-input:checked {
+            background-color: #0d6efd;
+            border-color: #0d6efd;
         }
     </style>
 </head>
 <body>
-    <h1>Информация о пользователе ВКонтакте</h1>
-    <form method="POST">
-        <label for="vk_url">Введите ссылку на профиль ВКонтакте:</label>
-        <input type="text" id="vk_url" name="vk_url" required><br><br>
-        <button type="submit">Получить информацию</button>
-    </form>
-
-    {% if user_info %}
-        <div class="profile-info">
-            <h2>Информация:</h2>
-            <p><strong>Имя:</strong> {{ user_info.first_name }} {{ user_info.last_name }}</p>
-            <p><strong>Пол:</strong> {% if user_info.sex == 1 %}Женский{% elif user_info.sex == 2 %}Мужской{% else %}Не указан{% endif %}</p>
-            <p><strong>Дата рождения:</strong> {{ formatted_bdate }}</p>
-            <p><strong>Город:</strong> {{ user_info.city['title'] if user_info.city else 'Не указан' }}</p>
-
-            {% if interests_graph %}
-                <h3>График интересов</h3>
-                <img src="data:image/png;base64,{{ interests_graph }}" alt="График интересов">
-            {% else %}
-                <p>Нет данных для построения графика интересов.</p>
-            {% endif %}
-
-            {% if post_activity_graph %}
-                <h3>Публикационная активность</h3>
-                <img src="data:image/png;base64,{{ post_activity_graph }}" alt="График активности публикаций">
-            {% else %}
-                <p>Нет данных для построения графика активности публикаций.</p>
-            {% endif %}
-
-            {% if friends_gender_stats %}
-                <h3>Статистика по друзьям по полу</h3>
-                <p><strong>Мужчины:</strong> {{ friends_gender_stats['Мужчины'] }}</p>
-                <p><strong>Женщины:</strong> {{ friends_gender_stats['Женщины'] }}</p>
-            {% endif %}
-
-            {% if friends_gender_graph %}
-                <h3>Статистика по полу друзей:</h3>
-                <img src="data:image/png;base64,{{ friends_gender_graph }}" alt="График по полу друзей">
-            {% else %}
-                <p>Не удалось создать график по полу друзей.</p>
-            {% endif %}
-
-            {% if top_groups_graph %}
-                <h3>Топ-5 групп по количеству участников:</h3>
-                <img src="data:image/png;base64,{{ top_groups_graph }}" alt="Топ-5 групп по количеству участников">
-            {% else %}
-                <p>Не удалось создать график топ-5 групп.</p>
-            {% endif %}
-
-            {% if top_groups_info %}
-                <h4>Топ-5 групп по количеству участников:</h4>
-                <ul>
-                    {% for group, members in top_groups_info %}
-                        <li>{{ group }} - {{ members }} участников</li>
-                    {% endfor %}
-                </ul>
-            {% endif %}
+    <div class="container py-4">
+        <div class="profile-header text-center">
+            <h1 class="display-4">Анализ профиля ВКонтакте</h1>
+            <p class="lead">Полная статистика и рекомендации</p>
         </div>
-    {% else %}
-        <p class="alert">Введите ссылку на профиль ВКонтакте для получения информации.</p>
-    {% endif %}
+
+        
+        <div class="row justify-content-center mb-4">
+            <div class="col-lg-8">
+                <form method="POST" class="settings-panel" id="profile-form">
+                    <div class="mb-3">
+                        <label for="vk_url" class="form-label">Ссылка на профиль ВКонтакте</label>
+                        <input type="text" class="form-control" id="vk_url" name="vk_url" required
+                               value="{{ request.form['vk_url'] if request.method == 'POST' else '' }}">
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <h5>Отображаемые данные:</h5>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="show_interests" id="show_interests"
+                                       {% if show_interests %}checked{% endif %} onchange="this.form.submit()">
+                                <label class="form-check-label" for="show_interests">Интересы</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="show_posts" id="show_posts"
+                                       {% if show_posts %}checked{% endif %} onchange="this.form.submit()">
+                                <label class="form-check-label" for="show_posts">Публикации</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="show_friends" id="show_friends"
+                                       {% if show_friends %}checked{% endif %} onchange="this.form.submit()">
+                                <label class="form-check-label" for="show_friends">Друзья</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="show_groups" id="show_groups"
+                                       {% if show_groups %}checked{% endif %} onchange="this.form.submit()">
+                                <label class="form-check-label" for="show_groups">Группы</label>
+                            </div>
+                            
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="show_toxicity" id="show_toxicity"
+                                       {% if show_toxicity %}checked{% endif %} onchange="this.form.submit()">
+                                <label class="form-check-label" for="show_toxicity">Анализ токсичности</label>
+                            </div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="scale" class="form-label">Масштаб графиков</label>
+                                <select class="form-select" name="scale" id="scale" onchange="this.form.submit()">
+                                    <option value="1" {% if scale == '1' %}selected{% endif %}>100%</option>
+                                    <option value="1.5" {% if scale == '1.5' %}selected{% endif %}>150%</option>
+                                    <option value="2" {% if scale == '2' %}selected{% endif %}>200%</option>
+                                </select>
+                            </div>
+
+                            <div class="mb-3">
+                                <label for="color" class="form-label">Цветовая схема</label>
+                                <select class="form-select" name="color" id="color" onchange="this.form.submit()">
+                                    <option value="blue" {% if color == 'blue' %}selected{% endif %}>Синяя</option>
+                                    <option value="green" {% if color == 'green' %}selected{% endif %}>Зелёная</option>
+                                    <option value="red" {% if color == 'red' %}selected{% endif %}>Красная</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary w-100">Обновить данные</button>
+                </form>
+            </div>
+        </div>
+
+        {% if user_info %}
+           
+            <div class="row mb-4">
+                <div class="col-md-4">
+                    <div class="card">
+                        <div class="card-body text-center">
+                            <img src="{{ user_info.photo_100 }}" alt="Фото профиля" class="rounded-circle mb-3" width="120">
+                            <h3>{{ user_info.first_name }} {{ user_info.last_name }}</h3>
+                            <p class="text-muted">
+                                {% if user_info.city %}
+                                    <i class="bi bi-geo-alt"></i> {{ user_info.city.title }}
+                                {% endif %}
+                            </p>
+                        </div>
+                        <ul class="list-group list-group-flush">
+                            <li class="list-group-item">
+                                <strong>Дата рождения:</strong> {{ formatted_bdate }}
+                            </li>
+                            <li class="list-group-item">
+                                <strong>Пол:</strong>
+                                {% if user_info.sex == 1 %}Женский{% elif user_info.sex == 2 %}Мужской{% else %}Не указан{% endif %}
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="col-md-8">
+                    
+                    <div class="card analytics-card">
+                        <div class="card-body">
+                            <h5 class="card-title"><i class="bi bi-graph-up"></i> Анализ профиля</h5>
+                            <p class="card-text">{{ user_analytics }}</p>
+                        </div>
+                    </div>
+                    {% if show_toxicity %}
+                    <div class="card analytics-card mt-3">
+                        <div class="card-body">
+                            <h5 class="card-title"><i class="bi bi-exclamation-triangle-fill"></i> Анализ токсичности</h5>
+                            {% if toxic_posts %}
+                                <h6>Токсичные посты:</h6>
+                                <ul class="list-group">
+                                    {% for post in toxic_posts %}
+                                        <li class="list-group-item">
+                                            {{ post.text | e }}
+                                            {% if post.url %}
+                                                <br><a href="{{ post.url }}" target="_blank" rel="noopener noreferrer">Перейти к посту</a>
+                                            {% endif %}
+                                        </li>
+                                    {% endfor %}
+                                </ul>
+                            {% else %}
+                                <p>Токсичных постов не найдено.</p>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endif %}
+
+
+                    <div class="row">
+                        {% if show_interests and interests_graph %}
+                        <div class="col-md-6">
+                            <div class="graph-container">
+                                <h5>Интересы</h5>
+                                <img src="data:image/png;base64,{{ interests_graph }}" alt="График интересов" class="img-fluid">
+                            </div>
+                        </div>
+                        {% endif %}
+
+                        {% if show_friends and friends_gender_graph %}
+                        <div class="col-md-6">
+                            <div class="graph-container">
+                                <h5>Друзья по полу</h5>
+                                <img src="data:image/png;base64,{{ friends_gender_graph }}" alt="График друзей по полу" class="img-fluid">
+                            </div>
+                        </div>
+                        {% endif %}
+
+
+                        {% if show_posts and post_activity_graph %}
+                        <div class="col-md-6">
+                            <div class="graph-container">
+                                <h5>Активность публикаций</h5>
+                                <img src="data:image/png;base64,{{ post_activity_graph }}" alt="График активности публикаций" class="img-fluid">
+                            </div>
+                        </div>
+                        {% endif %}
+
+                        {% if show_groups and top_groups_graph %}
+                        <div class="col-md-6">
+                            <div class="graph-container">
+                                <h5>Топ группы</h5>
+                                <img src="data:image/png;base64,{{ top_groups_graph }}" alt="Топ-5 групп по количеству участников" class="img-fluid">
+                            </div>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+          
+            <div class="card mb-4">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0"><i class="bi bi-people-fill"></i> Рекомендуемые знакомства</h5>
+                </div>
+                <div class="card-body">
+                    {% if not dating_recommendations %}
+                        <div class="alert alert-info">
+                            Недостаточно данных для рекомендаций. Попробуйте расширить круг общения!
+                        </div>
+                    {% else %}
+                        <div class="row row-cols-1 row-cols-md-3 g-4">
+                            {% for rec in dating_recommendations %}
+                            <div class="col">
+                                <div class="card recommendation-card h-100">
+                                    <img src="{{ rec.photo }}" class="card-img-top" alt="{{ rec.name }}">
+                                    <div class="card-body">
+                                        <h5 class="card-title">
+                                            <a href="{{ rec.url }}" target="_blank" class="text-decoration-none">{{ rec.name }}</a>
+                                        </h5>
+                                        <span class="badge reason-badge mb-2">{{ rec.reason }}</span>
+                                    </div>
+                                    <div class="card-footer bg-transparent">
+                                        <a href="{{ rec.url }}" target="_blank" class="btn btn-sm btn-outline-primary">Профиль ВК</a>
+                                    </div>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            
+            {% if social_graph_img %}
+                
+                <div class="alert alert-info">
+                    Длина данных графа: {{ social_graph_img|length }} символов
+                    {% if social_graph_img|length < 100 %}
+                        (Возможно ошибка генерации)
+                    {% endif %}
+                </div>
+
+                <div class="card mb-4">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="mb-0">Социальный граф</h5>
+                    </div>
+                    <div class="card-body text-center">
+                        <img src="data:image/png;base64,{{ social_graph_img }}"
+                             alt="Социальный граф"
+                             class="img-fluid"
+                             style="max-width: 100%; height: auto;">
+                    </div>
+                </div>
+            {% else %}
+                <div class="alert alert-warning">
+                    Не удалось сгенерировать социальный граф. Возможные причины:
+                    <ul>
+                        <li>Профиль пользователя закрыт</li>
+                        <li>Недостаточно друзей для построения графа</li>
+                        <li>Ошибка при обработке данных</li>
+                    </ul>
+                </div>
+            {% endif %}
+        {% endif %}
+    </div>
+
+
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
 </body>
 </html>
-
